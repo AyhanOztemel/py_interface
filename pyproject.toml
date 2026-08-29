@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,12 +8,15 @@ version = "0.3.0"
 description = "Java/C# tarzi arayuzler: imzayi da dogrulayan, sinif tanimlandigi anda hata veren, kaynak koda bagimli olmayan"
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "MIT" }
+authors = [{ name = "Ayhan Öztemel" }]
+license = "MIT"
+license-files = ["LICENSE"]
 keywords = ["interface", "protocol", "abc", "contract", "type-safety"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -23,6 +26,11 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/AyhanOztemel/py_interface"
+Repository = "https://github.com/AyhanOztemel/py_interface"
+Issues = "https://github.com/AyhanOztemel/py_interface/issues"
 
 [project.optional-dependencies]
 dev = ["pytest>=7", "mypy>=1.8", "ruff>=0.4", "typeguard>=4"]

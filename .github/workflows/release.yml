@@ -1,0 +1,64 @@
+name: PyPI Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Dagitim paketlerini olustur
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Paketleme araclarini kur
+        run: python -m pip install --upgrade pip build twine
+
+      - name: Surum etiketi ile paket surumunu dogrula
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: >-
+          python -c "import os, pathlib, tomllib;
+          version = tomllib.loads(pathlib.Path('pyproject.toml').read_text(encoding='utf-8'))['project']['version'];
+          expected = f'v{version}'; actual = os.environ['RELEASE_TAG'];
+          assert actual == expected, f'Etiket {actual!r}; beklenen {expected!r}'"
+
+      - name: Wheel ve source distribution olustur
+        run: python -m build
+
+      - name: Dagitim metadata'sini dogrula
+        run: python -m twine check dist/*
+
+      - name: Dagitim dosyalarini aktar
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    name: PyPI'ye yayinla
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/strict-interface
+    permissions:
+      id-token: write
+    steps:
+      - name: Dagitim dosyalarini indir
+        uses: actions/download-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+
+      - name: Trusted Publishing ile PyPI'ye yukle
+        uses: pypa/gh-action-pypi-publish@release/v1

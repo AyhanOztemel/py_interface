@@ -3,6 +3,12 @@
 Python'da **imzayi da dogrulayan**, hatayi **sinif tanimlanir tanimlanmaz**
 veren ve kaynak koduna erisim gerektirmeyen arayuzler.
 
+## Kurulum
+
+```bash
+pip install strict-interface
+```
+
 ```python
 from strict_interface import Interface, default
 
