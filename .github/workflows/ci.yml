@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: pytest (${{ matrix.os }}, Python ${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # Bir surumun kirilmasi digerlerinin sonucunu gizlemesin: bos govde
+      # tespiti derlenmis kod sekline bagli oldugu icin hatalar surume ve
+      # yorumlayiciya ozgu olabiliyor.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14", "pypy3.10", "pypy3.11"]
+        exclude:
+          - {os: windows-latest, python-version: "pypy3.10"}
+          - {os: windows-latest, python-version: "pypy3.11"}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Python ${{ matrix.python-version }} kurulumu
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Bagimliliklari kur
+        run: python -m pip install --upgrade pip && python -m pip install -e ".[dev]"
+
+      - name: Testler
+        run: python -m pytest -q
+
+      - name: Kalibre edilen bos govde imzalarini raporla
+        shell: bash
+        run: |
+          python -c "import platform, sys, strict_interface._core as c; \
+          print(platform.python_implementation(), sys.version); \
+          print('kalibre edilen govde imzasi:', len(c._STUB_SHAPES))"
+
+      - name: Ornekler calisiyor mu
+        run: |
+          python example.py
+          python example2.py
+
+  lint:
+    name: ruff + mypy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Bagimliliklari kur
+        run: python -m pip install --upgrade pip && python -m pip install -e ".[dev]"
+
+      - name: ruff
+        run: python -m ruff check .
+
+      - name: mypy
+        run: python -m mypy strict_interface
+
+  build:
+    name: paket kurulabiliyor mu
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Wheel ve sdist uret
+        run: python -m pip install --upgrade pip build twine && python -m build
+
+      - name: Meta veriyi dogrula
+        run: python -m twine check dist/*
+
+      - name: py.typed wheel icinde mi
+        run: python -c "import zipfile, glob; w = glob.glob('dist/*.whl')[0]; names = zipfile.ZipFile(w).namelist(); assert 'strict_interface/py.typed' in names, names; print('py.typed wheel icinde')"

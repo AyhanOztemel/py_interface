@@ -1,57 +1,56 @@
-from interfaceDecarator import interface
-@interface
-class IExample:
-    
-    def method1(self):pass
-    
-    def method2(self):        
-        pass
-    def method3(self):
-        pass
-    def method4(self):
-        pass
-    def method7(self):
-        pass
-@interface
-class IIExample(IExample):
-    def method5(self):
-        pass
-    def method6(self):
-        pass
- 
-    
-@interface
-class IIIExample(IIExample):
-    def method8(self):
-        pass
-    def method9(self):
-        pass
-#--------------------------------------------
+"""Sozlesmelerin tanimlandigi yer.
 
-@interface
-class I_IV_Example:
-    
-    def method1(self):pass
-    
-    def method2(self):        
-        pass
-    def method3(self):
-        pass
-    def method4(self):
-        pass
-    def method7(self):
-        pass
-@interface
-class I_V_Example():
-    def method5(self):
-        pass
-    def method6(self):
-        pass
- 
-    
-@interface
-class I_VI_Example():
-    def method8(self):
-        pass
-    def method9(self):
-        pass
+Bu dosya `strict_interface`i import eden **tek** dosyadir. `example.py`
+yalnizca buradan arayuz siniflarini alir; dogrulama arka planda, sinif
+tanimlandigi anda kendiliginden calisir.
+"""
+
+from strict_interface import Interface, default
+
+
+class IExample(Interface):
+    def method1(self) -> None: ...
+    def method2(self, value: int) -> str: ...
+    def method3(self) -> None: ...
+    def method4(self, *, verbose: bool = False) -> None: ...
+    def method7(self) -> None: ...
+
+
+class IIExample(IExample, Interface):
+    def method5(self) -> None: ...
+    def method6(self) -> None: ...
+
+
+class IIIExample(IIExample, Interface):
+    def method8(self) -> None: ...
+    def method9(self) -> None: ...
+
+    @default
+    def describe(self) -> str:              # Alt siniflara hazir miras kalan metot
+        return f"{type(self).__name__} IIIExample sozlesmesini karsiliyor"
+
+
+# --------------------------------------------------------------------------- #
+# Bagimsiz (miras almayan) arayuzler
+# --------------------------------------------------------------------------- #
+class I_IV_Example(Interface):
+    def method1(self) -> None: ...
+    def method2(self, value: int) -> str: ...
+    def method3(self) -> None: ...
+    def method4(self, *, verbose: bool = False) -> None: ...
+    def method7(self) -> None: ...
+
+
+class I_V_Example(Interface):
+    def method5(self) -> None: ...
+    def method6(self) -> None: ...
+
+
+class I_VI_Example(Interface):
+    def method8(self) -> None: ...
+    def method9(self) -> None: ...
+
+
+class IClosable(Interface, structural=True):
+    """Yapisal arayuz: miras almadan da isinstance ile eslesir."""
+    def close(self) -> None: ...
