@@ -50,7 +50,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: pypi
-      url: https://pypi.org/p/strict-interface
+      url: https://pypi.org/p/interface-contract
     permissions:
       id-token: write
     steps:

@@ -3,15 +3,15 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "strict-interface"
-version = "0.3.0"
-description = "Java/C# tarzi arayuzler: imzayi da dogrulayan, sinif tanimlandigi anda hata veren, kaynak koda bagimli olmayan"
+name = "interface-contract"
+version = "0.4.0"
+description = "Definition-time Python interface contracts with signature-aware runtime validation"
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "Ayhan Öztemel" }]
 license = "MIT"
 license-files = ["LICENSE"]
-keywords = ["interface", "protocol", "abc", "contract", "type-safety"]
+keywords = ["interface", "protocol", "abc", "contract", "runtime", "type-safety"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -36,17 +36,20 @@ Issues = "https://github.com/AyhanOztemel/py_interface/issues"
 dev = ["pytest>=7", "mypy>=1.8", "ruff>=0.4", "typeguard>=4"]
 
 [tool.setuptools.packages.find]
-include = ["strict_interface*"]
+include = ["interface_contract*", "strict_interface*"]
 
 [tool.setuptools.package-data]
 strict_interface = ["py.typed"]
+interface_contract = ["py.typed"]
 
 [tool.pytest.ini_options]
-testpaths = ["test_strict_interface.py"]
+testpaths = ["."]
+python_files = ["test_*.py"]
 filterwarnings = ["error::RuntimeWarning"]
 
 [tool.mypy]
 strict = true
+plugins = ["interface_contract.mypy_plugin"]
 # Arayuz govdeleri kasitli olarak bostur.
 disable_error_code = ["empty-body"]
 
@@ -61,6 +64,7 @@ select = ["E", "F", "W", "I", "UP", "B", "S", "C4", "SIM", "RUF"]
 # Testler bos govde tespitini kaynak kodu olmadan dogrulamak zorunda; exec ve
 # assert burada aracin kendisi.
 "test_strict_interface.py" = ["S101", "S102"]
+"test_interface_contract.py" = ["S101"]
 # Ornek dosyalarin gruplanmis import yazimi kasitli ve sabit kalmali; ruff'in
 # isort'u sarmalarken tek-satir-tek-isim bicimini dayatiyor.
 "example.py" = ["I001"]

@@ -1,32 +1,22 @@
-"""strict_interface — Java/C# tarzi, imza dogrulayan arayuzler.
+"""Primary public package for interface-contract.
 
-    from strict_interface import Interface
-
-    class IRepository(Interface):
-        def find(self, id: int) -> str: ...
-        def save(self, item: str) -> None: ...
-
-    class SqlRepository(IRepository):        # dekoratör gerekmez
-        def __init__(self, dsn: str) -> None:
-            self.dsn = dsn
-        def find(self, id: int) -> str: return f"row {id}"
-        def save(self, item: str) -> None: ...
-
-Sozlesme, sinif tanimlandigi anda dogrulanir. Sozlesmeyi kasten kismen
-dolduran ara siniflar icin `abstract=True` verin:
-
-    class BaseRepo(IRepository, abstract=True):
-        def save(self, item: str) -> None: ...
+``strict_interface`` remains available as a fully compatible legacy import.
 """
 
-from ._core import (
+from strict_interface import (
+    AdaptationError,
+    AdapterRegistry,
     AttributeSpec,
     Interface,
     InterfaceError,
     InterfaceMeta,
     Member,
+    __version__,
+    adapt,
     attributes_of,
+    can_adapt,
     default,
+    default_registry,
     implements,
     interface,
     interface_implement,
@@ -36,20 +26,13 @@ from ._core import (
     members_of,
     missing_attributes,
     missing_members,
+    register_adapter,
     satisfies,
     signature_problem,
     structurally_implements,
+    unregister_adapter,
     verify,
     verify_instance,
-)
-from .adapters import (
-    AdaptationError,
-    AdapterRegistry,
-    adapt,
-    can_adapt,
-    default_registry,
-    register_adapter,
-    unregister_adapter,
 )
 
 __all__ = [
@@ -60,6 +43,7 @@ __all__ = [
     "InterfaceError",
     "InterfaceMeta",
     "Member",
+    "__version__",
     "adapt",
     "attributes_of",
     "can_adapt",
@@ -82,4 +66,3 @@ __all__ = [
     "verify",
     "verify_instance",
 ]
-__version__ = "0.4.0"

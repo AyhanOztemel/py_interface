@@ -5,8 +5,19 @@ from __future__ import annotations
 import ast
 import inspect
 import textwrap
+import types
 from collections.abc import Callable
-from typing import Any
+from typing import (
+    Annotated,
+    Any,
+    ClassVar,
+    Literal,
+    TypeVar,
+    Union,
+    get_args,
+    get_origin,
+    get_type_hints,
+)
 
 _FLAG = "__is_interface__"
 _MEMBERS = "__interface_members__"
@@ -15,6 +26,8 @@ _STRUCTURAL = "__interface_structural__"
 _DEFAULT = "__interface_default__"
 _ANNOTATED = "__interface_check_annotations__"
 _ABSTRACT = "__interface_abstract__"
+_ATTRIBUTES = "__interface_attributes__"
+_CHECK_ATTRIBUTES = "__interface_check_attributes__"
 
 
 class InterfaceError(TypeError):
@@ -165,6 +178,20 @@ class Member:
     def __repr__(self) -> str:
         flag = " (default)" if self.is_default else ""
         return f"<{self.kind} {self.owner}.{self.name}{flag}>"
+
+
+class AttributeSpec:
+    """An opt-in instance-attribute requirement declared by an interface."""
+
+    __slots__ = ("annotation", "name", "owner")
+
+    def __init__(self, name: str, annotation: Any, owner: str) -> None:
+        self.name = name
+        self.annotation = annotation
+        self.owner = owner
+
+    def __repr__(self) -> str:
+        return f"<attribute {self.owner}.{self.name}: {self.annotation!r}>"
 
 
 def _has_default(raw: Any) -> bool:
@@ -329,6 +356,7 @@ class InterfaceMeta(type):
                 *, interface: bool | None = None, structural: bool = False,
                 name_prefix: str | None = None, strict_body: bool = True,
                 check_annotations: bool = False, abstract: bool = False,
+                check_attributes: bool | None = None,
                 **kwargs: Any) -> InterfaceMeta:
         cls = super().__new__(mcls, name, bases, dict(namespace), **kwargs)
 
@@ -354,17 +382,25 @@ class InterfaceMeta(type):
             return cls
 
         # --- arayuz yolu ---------------------------------------------------- #
+        if check_attributes is None:
+            check_attributes = any(
+                bool(base.__dict__.get(_CHECK_ATTRIBUTES, False))
+                for base in cls.__mro__[1:] if is_interface(base)
+            )
         type.__setattr__(cls, _STRUCTURAL, structural)
         type.__setattr__(cls, _ANNOTATED, check_annotations)
+        type.__setattr__(cls, _CHECK_ATTRIBUTES, bool(check_attributes))
 
         problems: list[str] = []
         if name_prefix and not name.startswith(name_prefix):
             problems.append(f"arayuz adi '{name_prefix}' ile baslamali")
 
         members: dict[str, Member] = {}
+        attributes: dict[str, AttributeSpec] = {}
         for base in reversed(cls.__mro__[1:]):
             if is_interface(base):
                 members.update(base.__dict__.get(_MEMBERS, {}))
+                attributes.update(base.__dict__.get(_ATTRIBUTES, {}))
             elif not _is_allowed_base(base):
                 problems.append(f"arayuz yalnizca arayuzlerden turetilebilir; "
                                 f"'{base.__name__}' bir arayuz degil")
@@ -387,11 +423,24 @@ class InterfaceMeta(type):
                             f"@default kullanin")
             members[key] = member
 
+        if check_attributes:
+            raw_annotations = namespace.get("__annotations__", {})
+            try:
+                resolved_annotations = get_type_hints(cls, include_extras=True)
+            except (NameError, TypeError):
+                resolved_annotations = {}
+            for key, raw_annotation in raw_annotations.items():
+                annotation = resolved_annotations.get(key, raw_annotation)
+                if key.startswith("_") or get_origin(annotation) is ClassVar:
+                    continue
+                attributes[key] = AttributeSpec(key, annotation, name)
+
         if problems:
             raise InterfaceError(
                 f"{name} arayuzu gecersiz:\n  - " + "\n  - ".join(problems))
 
         type.__setattr__(cls, _MEMBERS, members)
+        type.__setattr__(cls, _ATTRIBUTES, attributes)
         return cls
 
     # --- ornekleme -------------------------------------------------------- #
@@ -405,12 +454,17 @@ class InterfaceMeta(type):
                 f"ornegi olusturulamaz.")
         if not cls.__dict__.get(_VERIFIED, False):
             verify(cls)
-        return super().__call__(*args, **kwargs)
+        instance = super().__call__(*args, **kwargs)
+        verify_instance(instance)
+        return instance
 
     # --- onbellek gecersizleme -------------------------------------------- #
     def __setattr__(cls, key: str, value: Any) -> None:
         type.__setattr__(cls, key, value)
-        if key not in (_VERIFIED, _MEMBERS, _FLAG, _STRUCTURAL, _ANNOTATED, _ABSTRACT):
+        if key not in (
+            _VERIFIED, _MEMBERS, _FLAG, _STRUCTURAL, _ANNOTATED, _ABSTRACT,
+            _ATTRIBUTES, _CHECK_ATTRIBUTES,
+        ):
             _invalidate(cls)
 
     def __delattr__(cls, key: str) -> None:
@@ -419,7 +473,11 @@ class InterfaceMeta(type):
 
     # --- yapisal tipleme --------------------------------------------------- #
     def __instancecheck__(cls, obj: Any) -> bool:
-        return cls.__subclasscheck__(type(obj))
+        if super().__instancecheck__(obj):
+            return True
+        if not (cls.__dict__.get(_FLAG) and cls.__dict__.get(_STRUCTURAL)):
+            return False
+        return satisfies(obj, cls)
 
     def __subclasscheck__(cls, sub: type) -> bool:
         # super() ile zincirleniyor ki InterfaceMeta baska bir metaclass ile
@@ -458,6 +516,21 @@ class Interface(metaclass=InterfaceMeta, interface=True):
 
     __slots__ = ()
 
+    def __init_subclass__(
+        cls,
+        *,
+        interface: bool | None = None,
+        structural: bool = False,
+        name_prefix: str | None = None,
+        strict_body: bool = True,
+        check_annotations: bool = False,
+        abstract: bool = False,
+        check_attributes: bool | None = None,
+        **kwargs: Any,
+    ) -> None:
+        """Document class keywords for type checkers; InterfaceMeta consumes them."""
+        super().__init_subclass__(**kwargs)
+
 
 def is_abstract(obj: Any) -> bool:
     """`abstract=True` ile tanimlanmis, sozlesmeyi kismen dolduran ara sinif mi?"""
@@ -470,6 +543,15 @@ def members_of(cls: type) -> dict[str, Member]:
     for base in reversed(getattr(cls, "__mro__", (cls,))):
         if is_interface(base):
             collected.update(base.__dict__.get(_MEMBERS, {}))
+    return collected
+
+
+def attributes_of(cls: type) -> dict[str, AttributeSpec]:
+    """Return opt-in instance-attribute requirements inherited by ``cls``."""
+    collected: dict[str, AttributeSpec] = {}
+    for base in reversed(getattr(cls, "__mro__", (cls,))):
+        if is_interface(base):
+            collected.update(base.__dict__.get(_ATTRIBUTES, {}))
     return collected
 
 
@@ -491,10 +573,120 @@ def missing_members(cls: type) -> list[str]:
     return [n for n in _required(cls) if _find_implementation(cls, n) is None]
 
 
+def _concrete_attribute_owner(cls: type, name: str) -> type | None:
+    for base in cls.__mro__:
+        if is_interface(base):
+            continue
+        if name in vars(base):
+            return base
+    return None
+
+
+def _annotation_matches(value: Any, annotation: Any) -> bool:
+    """Best-effort, shallow runtime check for a standard type annotation."""
+    if annotation is Any or annotation is inspect.Signature.empty:
+        return True
+    if annotation is None:
+        return value is None
+    if isinstance(annotation, str):
+        return True  # Forward references need the defining module namespace.
+    if isinstance(annotation, TypeVar):
+        if annotation.__constraints__:
+            return any(_annotation_matches(value, item) for item in annotation.__constraints__)
+        return _annotation_matches(value, annotation.__bound__) if annotation.__bound__ else True
+
+    origin = get_origin(annotation)
+    args = get_args(annotation)
+    if origin is Annotated:
+        return _annotation_matches(value, args[0]) if args else True
+    if origin in (Union, types.UnionType):
+        return any(_annotation_matches(value, item) for item in args)
+    if origin is Literal:
+        return value in args
+    if origin is ClassVar:
+        return True
+    if origin is not None:
+        try:
+            return isinstance(value, origin)
+        except TypeError:
+            return True
+    try:
+        return isinstance(value, annotation)
+    except TypeError:
+        return True
+
+
+def _instance_attribute_value(obj: Any, name: str) -> tuple[bool, Any]:
+    try:
+        namespace = vars(obj)
+    except TypeError:
+        namespace = {}
+    if name in namespace:
+        return True, namespace[name]
+
+    owner = _concrete_attribute_owner(type(obj), name)
+    if owner is None:
+        return False, None
+    try:
+        return True, getattr(obj, name)
+    except AttributeError:
+        return False, None
+
+
+def _attribute_problems(obj: Any, iface_or_impl: type) -> list[str]:
+    problems: list[str] = []
+    for name, spec in attributes_of(iface_or_impl).items():
+        exists, value = _instance_attribute_value(obj, name)
+        if not exists:
+            problems.append(f"'{name}' instance attribute eksik ({spec.owner} arayuzu)")
+        elif not _annotation_matches(value, spec.annotation):
+            problems.append(
+                f"'{name}' degeri {spec.annotation!r} anotasyonuyla uyusmuyor; "
+                f"{type(value).__name__} verildi"
+            )
+    return problems
+
+
+def missing_attributes(obj: Any, iface_or_impl: type | None = None) -> list[str]:
+    """Return missing opt-in instance attributes without raising."""
+    contract = type(obj) if iface_or_impl is None else iface_or_impl
+    return [
+        name for name in attributes_of(contract)
+        if not _instance_attribute_value(obj, name)[0]
+    ]
+
+
+def verify_instance(obj: Any, iface: type | None = None) -> Any:
+    """Verify runtime attributes, and optionally structural methods, on ``obj``."""
+    contract = type(obj) if iface is None else iface
+    if iface is not None and not is_interface(iface):
+        raise TypeError(f"{iface!r} bir arayuz degil")
+    if iface is not None and not structurally_implements(type(obj), iface, check_attributes=False):
+        raise InterfaceError(
+            f"{type(obj).__name__} {iface.__name__} arayuzunun metotlarini karsilamiyor."
+        )
+    problems = _attribute_problems(obj, contract)
+    if problems:
+        raise InterfaceError(
+            f"{type(obj).__name__} instance sozlesmesini karsilamiyor:\n  - "
+            + "\n  - ".join(problems)
+        )
+    return obj
+
+
+def satisfies(obj: Any, iface: type) -> bool:
+    """Return whether an object structurally satisfies methods and attributes."""
+    try:
+        verify_instance(obj, iface)
+    except (InterfaceError, TypeError, ValueError):
+        return False
+    return True
+
+
 def verify(cls: type) -> type:
     """Sinifi arayuz sozlesmesine karsi dogrular; uyumsuzsa InterfaceError atar."""
     contract = members_of(cls)
-    if not contract:
+    if not contract and not attributes_of(cls):
         raise InterfaceError(
             f"{cls.__name__} hicbir arayuzden turetilmemis.")
 
@@ -527,7 +719,12 @@ def verify(cls: type) -> type:
     return cls
 
 
-def structurally_implements(candidate: type, iface: type) -> bool:
+def structurally_implements(
+    candidate: type,
+    iface: type,
+    *,
+    check_attributes: bool = True,
+) -> bool:
     """Miras olmaksizin, uye uye uyum kontrolu (Protocol benzeri)."""
     if not is_interface(iface):
         raise TypeError(f"{iface!r} bir arayuz degil")
@@ -542,6 +739,14 @@ def structurally_implements(candidate: type, iface: type) -> bool:
         impl = classify(name, raw, getattr(candidate, "__name__", "?"))
         if impl is None or member_problem(declared, impl) is not None:
             return False
+    if check_attributes:
+        for name, spec in attributes_of(iface).items():
+            owner = _concrete_attribute_owner(candidate, name)
+            if owner is None:
+                return False
+            raw = vars(owner)[name]
+            if not isinstance(raw, property) and not _annotation_matches(raw, spec.annotation):
+                return False
     return True
 
 

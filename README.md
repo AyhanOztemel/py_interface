@@ -1,190 +1,266 @@
-# strict-interface
+# interface-contract
 
-Python'da **imzayi da dogrulayan**, hatayi **sinif tanimlanir tanimlanmaz**
-veren ve kaynak koduna erisim gerektirmeyen arayuzler.
-
-## Kurulum
+Strict runtime interface contracts for Python, with definition-time failures and
+signature-aware structural checks.
 
 ```bash
-pip install strict-interface
+pip install interface-contract
 ```
 
 ```python
-from strict_interface import Interface, default
+from interface_contract import Interface, default
 
-class IRepository(Interface):
-    def find(self, id: int) -> str: ...
+
+class Repository(Interface):
+    def find(self, item_id: int) -> str: ...
     def save(self, item: str) -> None: ...
 
     @property
     def name(self) -> str: ...
 
     @default
-    def describe(self) -> str:          # Alt siniflara hazir miras kalan metot
+    def describe(self) -> str:
         return f"repository<{self.name}>"
 
-class SqlRepository(IRepository):       # dekoratör gerekmez
-    def __init__(self, dsn: str) -> None:
-        self.dsn = dsn                  # kendi constructor'iniz korunur
 
-    def find(self, id: int) -> str: return f"row {id}"
-    def save(self, item: str) -> None: ...
+class SqlRepository(Repository):
+    def find(self, item_id: int) -> str:
+        return f"row {item_id}"
+
+    def save(self, item: str) -> None:
+        pass
 
     @property
-    def name(self) -> str: return "sql"
+    def name(self) -> str:
+        return "sql"
 ```
 
-### Interface icinde govdeli metot
+If `SqlRepository` misses a required member, changes its descriptor kind, or has
+an incompatible signature, class creation raises `InterfaceError`. You do not
+need to wait until an instance is created or a method is called.
 
-Interface icinde somut/govdeli bir metot yazacaksaniz `@default` kullanin.
-Bu dekorator, govdenin bilerek yazildigini belirtir. Alt sinif metodu hazir
-olarak miras alir; isterse kendi metodunu yazarak degistirebilir. `@default`
-olmadan yazilan govdeli interface metodu sozlesme hatasi kabul edilir.
+## Why interface-contract?
 
-## 0.3.0'da ne degisti
+Python already has `abc.ABC` and `typing.Protocol`; this package targets a
+different boundary: strict runtime validation for plugin systems, application
+architecture, dependency injection, and dynamically loaded code.
 
-**Python 3.14 destegi.** 3.14 sabit yuklemeleri icin `LOAD_SMALL_INT` opcode'unu
-getirdi. Kaynak koda erisilemeyen ortamlardaki bytecode yedegi bu komutu
-tanimadigi icin `def m(self): return 1` gibi **dolu bir govdeyi bos saniyordu** —
-yani sozlesme sessizce gevsiyordu.
+| Capability | `abc.ABC` | runtime `Protocol` | `interface-contract` |
+|---|---:|---:|---:|
+| Missing method detected at runtime | instantiation | `isinstance` | class definition |
+| Runtime signature validation | no | no | yes |
+| Property/static/class method kind validation | no | no | yes |
+| Signature-aware structural `isinstance` | no | no | yes |
+| Explicit default implementations | concrete method | concrete method | `@default` |
+| Optional instance-field contracts | annotations only | presence only | presence + shallow type check |
+| Runtime adapter registry | no | no | yes |
 
-Bununla birlikte yedek yolun yonu tersine cevrildi: artik tanimadigimiz her
-opcode bir hesaplama kabul edilir ve govde **dolu** raporlanir. Onceki davranis
-"emin degilsem gecir" idi; yenisi "emin degilsem reddet". Yeni bir CPython
-surumu artik kutuphaneyi sessizce gevsetemez, en fazla yuksek sesle hata verir.
+This is not a replacement for static typing. Use mypy or another type checker for
+whole-program analysis, and use interface-contract where runtime boundaries must
+fail loudly and predictably.
 
-Ayri olarak `issubclass`/`isinstance` artik `super()` ile zincirleniyor; boylece
-`InterfaceMeta` baska bir metaclass ile birlestirilebiliyor (asagiya bakin).
+## Core behavior
 
-## 0.2.0'da ne degisti
+### Definition-time validation
 
-Dogrulama artik **otomatik**. Bir arayuzden turetilen her sinif, `class`
-ifadesi calistigi anda dogrulanir; `@implements` yazmak zorunda degilsiniz.
-Dekoratör geriye donuk uyumluluk icin duruyor ve artik bir sey degistirmiyor.
-
-Bunun bir sonucu var: sozlesmeyi **kasten** kismen dolduran ara siniflar icin
-`abstract=True` vermelisiniz.
+Concrete subclasses are checked as soon as their `class` statement executes.
+Intermediate implementations can opt out until a concrete subclass is ready:
 
 ```python
-class BaseRepo(IRepository, abstract=True):   # eksik olmasi serbest
-    def save(self, item: str) -> None: ...
+class BaseRepository(Repository, abstract=True):
+    def save(self, item: str) -> None:
+        pass
 
-class SqlRepo(BaseRepo):                      # burada tam olmak zorunda
-    def find(self, id: int) -> str: return "row"
+
+class MemoryRepository(BaseRepository):
+    def find(self, item_id: int) -> str:
+        return "row"
+
     @property
-    def name(self) -> str: return "sql"
+    def name(self) -> str:
+        return "memory"
 ```
 
-`abstract=True` siniflar orneklenemez; dogrulama ilk somut alt sinifa ertelenir.
+Abstract implementations cannot be instantiated.
 
-## `abc` ve `Protocol` yerine neden?
+### Default methods
 
-| | `abc.ABC` | `typing.Protocol` | `strict_interface` |
-|---|---|---|---|
-| Eksik metot yakalanir | ornekleme aninda | statik (calisma aninda hayir) | **tanim aninda** |
-| **Imza uyumu dogrulanir** | hayir | statik olarak evet | **calisma aninda evet** |
-| Govde bosluk zorunlulugu | hayir | hayir | **evet** (`@default` haric) |
-| Arayuz orneklenemez | evet | — | evet |
-| Yapisal (mirassiz) `isinstance` | hayir | `@runtime_checkable` ile, sadece isim | **isim + imza** |
-
-Asil katki ucuncu ve son satir: ABC "metot var mi" diye bakar, imzaya bakmaz;
-`runtime_checkable` Protocol de yalnizca ismin varligini kontrol eder.
-
-## Ozellikler
-
-- Metot, `@property` (getter/setter/deleter ayri ayri), `@staticmethod`,
-  `@classmethod`, `async def`
-- `@default` ile govdeli varsayilan metotlar
-- `abstract=True` ile kismen dolduran ara siniflar
-- Jenerik arayuzler: `class IStore(Interface, Generic[T])`
-- Yapisal tipleme: `class IClosable(Interface, structural=True)` → `isinstance`
-  miras olmadan calisir, imza da kontrol edilir
-- Opsiyonel anotasyon kontrolu: `class IX(Interface, check_annotations=True)`
-- Opsiyonel isim kurali: `class IX(Interface, name_prefix="I")` — varsayilan
-  kapali, cunku Macarca notasyon PEP 8'e aykiridir
-- Eksikler tek hatada **toplu** raporlanir
-- Sinifa sonradan atama yapilirsa dogrulama onbellegi gecersizlenir
-- Govde kontrolu once AST ile, kaynak yoksa bytecode ile → REPL, `exec`,
-  notebook, frozen app ve yalniz `.pyc` dagitiminda da calisir
-
-## Turetilmis arayuz yazimi
-
-Bir sinif, **dogrudan** `Interface` listeliyorsa (veya `interface=True` aliyorsa)
-arayuzdur; aksi halde implementasyondur.
+Interface methods normally declare requirements and therefore must have an empty
+body (`...`, `pass`, or a docstring-only body). Mark intentional implementations
+with `@default`:
 
 ```python
-class IAudited(IRepository, Interface): ...      # arayuz
-class IAudited(IRepository, interface=True): ... # ayni sey
-class SqlRepository(IRepository): ...            # implementasyon
+from interface_contract import Interface, default
+
+
+class Named(Interface):
+    @property
+    def name(self) -> str: ...
+
+    @default
+    def display_name(self) -> str:
+        return self.name.title()
 ```
 
-Isaretlemeyi unutup govdesi tamamen bos bir sinif yazarsaniz hata mesaji size
-bunu hatirlatir.
+### Structural interfaces
 
-## Statik tip denetleyiciler
-
-`mypy`/`pyright` arayuzu normal bir sinif olarak gorur; `IRepository.find`
-cagrilarindaki tip hatalarini yakalar. Bos govdeler icin `empty-body` hata kodunu
-kapatmaniz gerekir (`pyproject.toml`de ayarlidir). Ozel bir mypy eklentisi
-yazilmadikca sozlesme kontrolleri **calisma aninda** kalir.
-
-## Baska metaclass'larla birlikte kullanim
-
-Arayuzler `InterfaceMeta` uzerine kuruludur. Kendi metaclass'i olan bir taban
-(`abc.ABC`, `enum.Enum`, Django `Model`, Pydantic `BaseModel`) ile dogrudan
-birlestirirseniz Python `metaclass conflict` hatasi verir. Bu Python'un genel
-kurali; cozumu iki metaclass'i birlestiren kucuk bir sinif yazmaktir:
+Set `structural=True` when inheritance is not under your control:
 
 ```python
-import abc
-from strict_interface import Interface, InterfaceMeta
+class Closable(Interface, structural=True):
+    def close(self) -> None: ...
 
-class Meta(InterfaceMeta, abc.ABCMeta):
+
+class FileLike:
+    def close(self) -> None:
+        pass
+
+
+assert isinstance(FileLike(), Closable)
+assert issubclass(FileLike, Closable)
+```
+
+Unlike runtime-checkable protocols, the structural check also validates callable
+signatures and descriptor kinds.
+
+### Instance-field contracts
+
+Field checking is opt-in, preserving compatibility with versions that ignored
+class annotations:
+
+```python
+class UserRecord(Interface, check_attributes=True):
+    name: str
+    age: int
+
+
+class User(UserRecord):
+    def __init__(self, name: str, age: int) -> None:
+        self.name = name
+        self.age = age
+```
+
+Fields are checked immediately after `__init__`. Standard annotations receive a
+best-effort shallow runtime check; parameter contents such as every item inside
+`list[str]` are intentionally not traversed. `ClassVar` does not declare an
+instance field. Dataclass implementations are supported.
+
+For objects that cannot inherit from an interface, use `verify_instance` or
+`satisfies`:
+
+```python
+from interface_contract import satisfies, verify_instance
+
+verify_instance(User("Ada", 37), UserRecord)  # returns the object or raises
+assert satisfies(User("Ada", 37), UserRecord)
+```
+
+### Adapters
+
+The registry converts an existing type to a target interface and validates the
+result:
+
+```python
+from interface_contract import AdapterRegistry
+
+registry = AdapterRegistry()
+
+
+@registry.register(dict, UserRecord)
+def dict_to_user(data: dict[str, object]) -> User:
+    return User(name=str(data["name"]), age=int(data["age"]))
+
+
+user = registry.adapt({"name": "Ada", "age": 37}, UserRecord)
+```
+
+`adapt`, `can_adapt`, `register_adapter`, and `unregister_adapter` expose a
+process-wide default registry when a dedicated registry is unnecessary.
+
+## Optional annotation checks
+
+Call signatures are always checked for parameter shape. To also compare available
+parameter and return annotations, enable `check_annotations=True`:
+
+```python
+class Parser(Interface, check_annotations=True):
+    def parse(self, value: str) -> int: ...
+```
+
+Runtime annotation comparison is deliberately conservative. It does not try to
+replace a static type checker.
+
+## Mypy integration
+
+The package is typed and ships an optional mypy plugin. It lets mypy reject the
+instantiation of incomplete implementations before execution. No extra runtime
+dependency is installed.
+
+```toml
+[tool.mypy]
+plugins = ["interface_contract.mypy_plugin"]
+```
+
+```python
+class Job(Interface):
+    def execute(self, payload: str) -> int: ...
+
+
+class Incomplete(Job):
     pass
 
-class ICloser(Interface, metaclass=Meta):
-    def close(self) -> None: ...
 
-class Impl(ICloser, abc.ABC):
-    def close(self) -> None: ...
+Incomplete()  # mypy: Cannot instantiate abstract class "Incomplete"
 ```
 
-`issubclass`/`isinstance` kontrolleri `super()` ile zincirlendigi icin diger
-metaclass'in semantigi korunur — ornegin `ICloser.register(...)` calismaya
-devam eder.
+The mypy plugin API is itself experimental; runtime validation remains the source
+of truth.
 
-## Bilinen sinirlar
+## Supported members
 
-- `interface` dekoratörü artik yalnizca **zincirin ilk halkasinda** kullanilabilir.
-  `@interface class IB(IA)` yazarsaniz, dekoratör calismadan once `IB` bir
-  implementasyon olarak dogrulanir ve hata alirsiniz. Turetilmis arayuzler icin
-  `class IB(IA, interface=True)` yazin.
-- Kaynak koduna ulasilamayan ortamlarda govde kontrolu bytecode'a duser. Bu yol
-  AST kadar hassas degildir: `return None` ve `return "sabit"` gibi govdeler bos
-  sayilabilir. Kaynak erisilebilir oldugunda (normal durum) AST kullanilir ve bu
-  belirsizlik olusmaz.
-- Kendi metaclass'i olan taban siniflarla birlesim icin yukaridaki bolume bakin.
+- regular and async methods
+- properties, including independent getter/setter/deleter requirements
+- static methods and class methods
+- generic interfaces
+- multiple and derived interfaces
+- custom metaclass composition
+- source-less environments such as REPL, `exec`, notebooks, frozen apps, and
+  bytecode-only distributions
 
-## Testler
+Useful inspection functions include `members_of`, `attributes_of`,
+`missing_members`, `missing_attributes`, `signature_problem`, `verify`, and
+`structurally_implements`.
+
+## Backward compatibility
+
+The former import path remains fully supported:
+
+```python
+from strict_interface import Interface
+```
+
+`strict_interface.Interface` and `interface_contract.Interface` are the same
+object. Existing source code does not need an import migration. The PyPI
+distribution name is `interface-contract`; the preferred new import is
+`interface_contract`.
+
+Version 0.4.0 is additive except for the distribution rename. Runtime field
+checking only activates when `check_attributes=True` is explicitly selected.
+
+## Development
 
 ```bash
-pip install -e ".[dev]"
-pytest -q          # 59 test
-ruff check .
-mypy strict_interface
+python -m pip install -e ".[dev]"
+python -m pytest
+python -m ruff check .
+python -m mypy strict_interface interface_contract typing_tests/valid.py
+python -m build
+python -m twine check dist/*
 ```
 
-## CI
+See [README.tr.md](README.tr.md) for Turkish documentation and
+[CHANGELOG.md](CHANGELOG.md) for release notes.
 
-`.github/workflows/ci.yml` her push ve pull request'te uc is calistirir:
+## License
 
-| Is | Kapsam |
-|---|---|
-| `test` | Linux ve Windows uzerinde CPython **3.10 – 3.14** (10 kombinasyon) |
-| `lint` | `ruff check` ve `mypy --strict` |
-| `build` | wheel/sdist uretimi, `twine check`, `py.typed`in pakete girdigi dogrulanir |
-
-`fail-fast: false` bilincli: bos govde tespiti bytecode'a dustugu icin hatalar
-surume ozgu olabiliyor, bir surumun kirilmasi digerlerinin sonucunu gizlememeli.
-`test` isi ayrica her surumde kalibre edilen opcode sozlugunu log'a yazar; bir
-CPython surumu opcode degistirdiginde ne oldugu dogrudan gorunur.
+MIT

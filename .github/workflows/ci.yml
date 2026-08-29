@@ -71,7 +71,18 @@ jobs:
         run: python -m ruff check .
 
       - name: mypy
-        run: python -m mypy strict_interface
+        run: python -m mypy strict_interface interface_contract typing_tests/valid.py
+
+      - name: mypy eksik implementasyonu reddediyor mu
+        shell: bash
+        run: |
+          if python -m mypy typing_tests/incomplete.py > mypy-output.txt 2>&1; then
+            cat mypy-output.txt
+            echo "Eksik implementasyon beklenmedik bicimde kabul edildi."
+            exit 1
+          fi
+          cat mypy-output.txt
+          grep -q 'Cannot instantiate abstract class' mypy-output.txt
 
   build:
     name: paket kurulabiliyor mu
@@ -90,5 +101,12 @@ jobs:
       - name: Meta veriyi dogrula
         run: python -m twine check dist/*
 
-      - name: py.typed wheel icinde mi
-        run: python -c "import zipfile, glob; w = glob.glob('dist/*.whl')[0]; names = zipfile.ZipFile(w).namelist(); assert 'strict_interface/py.typed' in names, names; print('py.typed wheel icinde')"
+      - name: Paketler ve py.typed wheel icinde mi
+        run: >-
+          python -c "import zipfile, glob;
+          w = glob.glob('dist/*.whl')[0];
+          names = zipfile.ZipFile(w).namelist();
+          expected = {'interface_contract/__init__.py', 'interface_contract/py.typed',
+          'strict_interface/__init__.py', 'strict_interface/py.typed'};
+          assert expected <= set(names), sorted(expected - set(names));
+          print('iki import paketi ve py.typed dosyalari wheel icinde')"
