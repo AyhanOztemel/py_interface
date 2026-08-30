@@ -1,5 +1,10 @@
 # interface-contract
 
+[![PyPI](https://img.shields.io/pypi/v/interface-contract.svg)](https://pypi.org/project/interface-contract/)
+[![Python](https://img.shields.io/pypi/pyversions/interface-contract.svg)](https://pypi.org/project/interface-contract/)
+[![CI](https://github.com/AyhanOztemel/py_interface/actions/workflows/ci.yml/badge.svg)](https://github.com/AyhanOztemel/py_interface/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/AyhanOztemel/py_interface/blob/main/LICENSE)
+
 Strict runtime interface contracts for Python, with definition-time failures and
 signature-aware structural checks.
 
