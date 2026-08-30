@@ -2,3 +2,5 @@ include CHANGELOG.md
 include LICENSE
 include README.md
 include README.tr.md
+include test_*.py
+recursive-include typing_tests *.py

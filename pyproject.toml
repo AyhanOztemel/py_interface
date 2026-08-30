@@ -22,6 +22,8 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: PyPy",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Typing :: Typed",
 ]
@@ -31,9 +33,15 @@ dependencies = []
 Homepage = "https://github.com/AyhanOztemel/py_interface"
 Repository = "https://github.com/AyhanOztemel/py_interface"
 Issues = "https://github.com/AyhanOztemel/py_interface/issues"
+Changelog = "https://github.com/AyhanOztemel/py_interface/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
-dev = ["pytest>=7", "mypy>=1.8", "ruff>=0.4", "typeguard>=4"]
+# Test-only, deliberately free of anything that needs a compiler: mypy 2.x pulls
+# in ast-serialize (PyO3), which requires 3.11+ and cannot build on PyPy 3.10.
+# typeguard is here because the CI examples import it.
+test = ["pytest>=7", "typeguard>=4"]
+# Lint tools are pinned so a new release cannot turn CI red on its own.
+dev = ["pytest>=7", "typeguard>=4", "mypy==2.3.1", "ruff==0.16.5"]
 
 [tool.setuptools.packages.find]
 include = ["interface_contract*", "strict_interface*"]

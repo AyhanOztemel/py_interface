@@ -258,8 +258,10 @@ python -m build
 python -m twine check dist/*
 ```
 
-See [README.tr.md](README.tr.md) for Turkish documentation and
-[CHANGELOG.md](CHANGELOG.md) for release notes.
+See [README.tr.md](https://github.com/AyhanOztemel/py_interface/blob/main/README.tr.md)
+for Turkish documentation and
+[CHANGELOG.md](https://github.com/AyhanOztemel/py_interface/blob/main/CHANGELOG.md)
+for release notes.
 
 ## License
 

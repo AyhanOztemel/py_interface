@@ -145,8 +145,11 @@ olduğu için çalışma zamanı doğrulaması esas güvence olmaya devam eder.
 - kaynak kodu bulunmayan REPL, notebook, `exec`, frozen ve yalnız bytecode
   ortamları
 
-Ayrıntılı İngilizce belge ve API örnekleri için [README.md](README.md), sürüm
-değişiklikleri için [CHANGELOG.md](CHANGELOG.md) dosyasına bakın.
+Ayrıntılı İngilizce belge ve API örnekleri için
+[README.md](https://github.com/AyhanOztemel/py_interface/blob/main/README.md),
+sürüm değişiklikleri için
+[CHANGELOG.md](https://github.com/AyhanOztemel/py_interface/blob/main/CHANGELOG.md)
+dosyasına bakın.
 
 ## Lisans
 
