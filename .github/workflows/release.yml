@@ -48,10 +48,13 @@ jobs:
     name: PyPI'ye yayinla
     needs: build
     runs-on: ubuntu-latest
-    environment:
-      name: pypi
-      url: https://pypi.org/p/interface-contract
+    # Bilerek environment tanimlanmiyor. Trusted Publishing, PyPI kaydindaki
+    # her alani birebir eslestirmek zorunda; environment claim'i 0.4.0
+    # denemelerinde tekrar tekrar invalid-publisher hatasi verdi. Eslesmesi
+    # gereken alan ne kadar azsa, kirilma ihtimali o kadar dusuk. Ayni kurulum
+    # kardes proje py_mediatR'da 6.7.1'i sorunsuz yayinladi.
     permissions:
+      contents: read
       id-token: write
     steps:
       - name: Dagitim dosyalarini indir
